@@ -85,7 +85,7 @@ em = Q.emendas(con, anos, sel)
 cv = Q.convenios(con, anos, sel)
 mun = MUN[MUN["codigo_ibge"].isin(sel)] if sel else MUN
 rk = Q.ranking_municipios(em, cv, mun)
-alertas = Q.alertas_convenios(cv)
+alertas = Q.alertas_convenios(Q.convenios(con, None, sel))   # alerta olha todos os anos (convênio recente ainda não venceu)
 
 k = st.columns(4)
 k[0].metric("Emendas pagas", Q.brl(em["pago"].sum(), curto=True), help="Valor efetivamente pago (ordens bancárias) "
@@ -94,7 +94,8 @@ k[1].metric("Emendas que chegaram", f"{em['codigo'].nunique()}",
             help="Número de emendas parlamentares com pagamento a algum município filtrado (inclui as 'emendas Pix').")
 k[2].metric("Convênios — valor liberado", Q.brl(cv["valor_liberado"].sum(), curto=True),
             help="Repasses já liberados em convênios e contratos de repasse com os municípios.")
-k[3].metric("Convênios em alerta", len(alertas), help="Vigência encerrada com menos de 50% do valor liberado.")
+k[3].metric("Convênios em alerta", len(alertas), help="Vigência encerrada com menos de 50% do valor liberado — vencidos nos últimos 10 anos e sem "
+            "encerramento formal (rescindidos, arquivados e com contas aprovadas ficam de fora).")
 
 aba1, aba2, aba3, aba4, aba5 = st.tabs(["📊 Visão geral", "🏛️ Emendas", "🤝 Convênios", "📍 Município", "ℹ️ Sobre os dados"])
 
@@ -218,7 +219,7 @@ with aba3:
             st.plotly_chart(barras_h(s["situacao"], s["valor"], [f"{Q.brl(v, True)} · {q}" for v, q in zip(s["valor"], s["qtd"])],
                                      cor=LARANJA), use_container_width=True)
         st.subheader(f"⚠️ Convênios em alerta ({len(alertas)})")
-        st.caption("Vigência já encerrada e menos de 50% do valor liberado. Não é prova de irregularidade: pode ser "
+        st.caption("Vigência já encerrada e menos de 50% do valor liberado (vencidos nos últimos 10 anos, de qualquer ano de início, e ainda sem encerramento formal). Não é prova de irregularidade: pode ser "
                    "prorrogação ainda não registrada, obra cancelada ou atraso — mas merece uma pergunta.")
         if alertas.empty:
             st.success("Nenhum convênio nessa situação nos filtros atuais.")

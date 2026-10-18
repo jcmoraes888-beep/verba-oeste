@@ -91,12 +91,20 @@ def ranking_municipios(em: pd.DataFrame, cv: pd.DataFrame, mun: pd.DataFrame) ->
     return df.sort_values("total", ascending=False)
 
 
-def alertas_convenios(cv: pd.DataFrame, hoje: date | None = None, limite: float = 0.5) -> pd.DataFrame:
-    """Convênios com vigência encerrada e menos de `limite` do valor liberado."""
-    hoje = (hoje or date.today()).isoformat()
+# situações em que o caso já foi encerrado (não faz sentido alertar)
+SITUACOES_ENCERRADAS = ("Rescindido", "Arquivado", "Baixado", "Prestação de contas aprovada",
+                        "Prestação de contas aprovada com ressalvas")
+
+
+def alertas_convenios(cv: pd.DataFrame, hoje: date | None = None, limite: float = 0.5, anos: int = 10) -> pd.DataFrame:
+    """Convênios com vigência encerrada nos últimos `anos` anos, ainda não encerrados formalmente,
+    e com menos de `limite` do valor liberado."""
+    hoje_d = hoje or date.today()
+    hoje, desde = hoje_d.isoformat(), hoje_d.replace(year=hoje_d.year - anos).isoformat()
     if cv.empty:
         return cv
-    d = cv[(cv["fim_vigencia"].notna()) & (cv["fim_vigencia"] < hoje) & (cv["valor"] > 0)].copy()
+    d = cv[(cv["fim_vigencia"].notna()) & (cv["fim_vigencia"] < hoje) & (cv["fim_vigencia"] >= desde)
+           & (cv["valor"] > 0) & (~cv["situacao"].isin(SITUACOES_ENCERRADAS))].copy()
     d["pct_liberado"] = d["valor_liberado"] / d["valor"]
     return d[d["pct_liberado"] < limite].sort_values("valor", ascending=False)
 
