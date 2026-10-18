@@ -1,0 +1,33 @@
+name: Coleta diária
+
+on:
+  schedule:
+    - cron: "17 9 * * *"     # todo dia às 06:17 (horário de Brasília)
+  workflow_dispatch:          # botão "Run workflow" para rodar na hora
+
+permissions:
+  contents: write
+
+jobs:
+  coletar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements-dev.txt
+      - run: python -m pytest -q tests
+      - name: Coletar dados do Portal da Transparência
+        env:
+          PORTAL_API_KEY: ${{ secrets.PORTAL_API_KEY }}
+        run: python -m coletor.coletar
+      - name: Salvar o banco atualizado
+        run: |
+          git config user.name "coleta-automatica"
+          git config user.email "actions@github.com"
+          git add dados/verba.db
+          git diff --cached --quiet || git commit -m "Atualiza dados ($(date +%F))"
+          git push

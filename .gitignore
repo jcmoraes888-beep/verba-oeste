@@ -1,0 +1,7 @@
+__pycache__/
+.venv/
+.streamlit/secrets.toml
+.env
+.pytest_cache/
+chave_api.txt
+teste_*_resultado.txt
