@@ -5,6 +5,8 @@
 """
 from __future__ import annotations
 
+import time
+
 import requests
 
 LOCALIDADES = "https://servicodados.ibge.gov.br/api/v1/localidades"
@@ -19,8 +21,16 @@ def municipios(regiao: str = f"meso:{MESORREGIAO_OESTE_PR}", sessao=None) -> lis
     s = sessao or requests
     tipo, codigo = regiao.split(":")
     caminho = {"meso": "mesorregioes", "micro": "microrregioes", "uf": "estados"}[tipo]
-    r = s.get(f"{LOCALIDADES}/{caminho}/{codigo}/municipios", timeout=60)
-    r.raise_for_status()
+    url = f"{LOCALIDADES}/{caminho}/{codigo}/municipios"
+    for tentativa in range(3):          # o IBGE às vezes não responde: tenta de novo antes de desistir
+        try:
+            r = s.get(url, timeout=(15, 45))
+            r.raise_for_status()
+            break
+        except requests.RequestException:
+            if tentativa == 2:
+                raise
+            time.sleep(10 * (tentativa + 1))
     out = []
     for m in r.json():
         uf = (m.get("microrregiao") or {}).get("mesorregiao", {}).get("UF", {}).get("sigla") or "PR"

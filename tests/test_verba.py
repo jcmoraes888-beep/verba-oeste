@@ -208,3 +208,36 @@ def test_api_para_quando_bloqueada():
     api = PortalTransparencia(chave="x" * 32, sessao=Sessao(), dormir=lambda s: None)
     with pytest.raises(APIBloqueada):
         api.get("despesas/documentos-por-favorecido", codigoPessoa="1")
+
+
+def test_municipios_ibge_fora_do_ar_usa_banco(tmp_path, monkeypatch):
+    """IBGE com timeout (como nas coletas de 22 e 23/10/2026): segue com os municípios já salvos."""
+    from coletor import banco
+    con = banco.conectar(tmp_path / "v.db")
+    banco.upsert(con, "municipios", [{"codigo_ibge": "4105003", "nome": "Céu Azul", "uf": "PR", "populacao": 11000}])
+    banco.set_meta(con, "regiao", "meso:4106")
+
+    def fora(regiao):
+        raise TimeoutError("Connection to servicodados.ibge.gov.br timed out")
+    monkeypatch.setattr(coletar.ibge, "municipios", fora)
+    indice = coletar.coletar_municipios(con, "meso:4106")
+    assert list(indice.values()) == ["4105003"]
+    assert con.execute("SELECT populacao FROM municipios").fetchone()[0] == 11000
+
+    # banco vazio: não há como seguir, o erro sobe
+    vazio = banco.conectar(tmp_path / "vazio.db")
+    with pytest.raises(TimeoutError):
+        coletar.coletar_municipios(vazio, "meso:4106")
+
+
+def test_populacao_fora_do_ar_mantem_a_salva(tmp_path, monkeypatch):
+    from coletor import banco
+    con = banco.conectar(tmp_path / "v.db")
+    banco.upsert(con, "municipios", [{"codigo_ibge": "4105003", "nome": "Céu Azul", "uf": "PR", "populacao": 11000}])
+    monkeypatch.setattr(coletar.ibge, "municipios", lambda r: [{"codigo_ibge": "4105003", "nome": "Céu Azul", "uf": "PR"}])
+
+    def fora(c):
+        raise TimeoutError("sidra")
+    monkeypatch.setattr(coletar.ibge, "populacao_censo2022", fora)
+    coletar.coletar_municipios(con, "meso:4106")
+    assert con.execute("SELECT populacao FROM municipios").fetchone()[0] == 11000

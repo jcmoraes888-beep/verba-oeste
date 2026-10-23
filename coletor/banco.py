@@ -69,3 +69,8 @@ def upsert(con: sqlite3.Connection, tabela: str, linhas: list[dict], substituir:
 def set_meta(con, chave: str, valor: str):
     con.execute("INSERT OR REPLACE INTO meta VALUES (?,?)", (chave, valor))
     con.commit()
+
+
+def get_meta(con, chave: str) -> str | None:
+    r = con.execute("SELECT valor FROM meta WHERE chave = ?", (chave,)).fetchone()
+    return r[0] if r else None

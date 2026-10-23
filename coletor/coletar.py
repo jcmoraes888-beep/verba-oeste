@@ -18,14 +18,25 @@ log = logging.getLogger("coletor")
 
 
 def coletar_municipios(con, regiao: str) -> dict[str, str]:
-    muns = ibge.municipios(regiao)
+    """Lista de municípios do IBGE. Se o IBGE estiver fora do ar (acontece: timeouts vindos do GitHub
+    Actions), usa os municípios já gravados no banco — a lista praticamente nunca muda."""
+    salvos = {r[0]: (r[1], r[2], r[3]) for r in
+              con.execute("SELECT codigo_ibge, nome, uf, populacao FROM municipios")}
+    try:
+        muns = ibge.municipios(regiao)
+    except Exception as e:
+        if not salvos or banco.get_meta(con, "regiao") not in (None, regiao):
+            raise
+        log.warning("IBGE indisponível (%s): usando os %d municípios já salvos no banco", e, len(salvos))
+        return {normalizar.chave_nome(nome): cod for cod, (nome, _uf, _pop) in salvos.items()}
     try:
         pop = ibge.populacao_censo2022([m["codigo_ibge"] for m in muns])
     except Exception as e:  # população é opcional (só usada no "por habitante")
         log.warning("Sem população do IBGE: %s", e)
         pop = {}
     for m in muns:
-        m["populacao"] = pop.get(m["codigo_ibge"])
+        # sem resposta do SIDRA, mantém a população que já estava no banco (não apaga com NULL)
+        m["populacao"] = pop.get(m["codigo_ibge"]) or (salvos.get(m["codigo_ibge"]) or (None, None, None))[2]
     banco.upsert(con, "municipios", muns)
     log.info("%d municípios", len(muns))
     return {normalizar.chave_nome(m["nome"]): m["codigo_ibge"] for m in muns}
